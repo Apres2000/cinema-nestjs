@@ -1,77 +1,62 @@
-import { Controller, Get, Post, Body, Param, Delete, Put, Req } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { PlaylistsService } from './playlists.service';
 import { CreatePlaylistDto } from './dto/create-playlist.dto';
-import { AddMovieDto } from './dto/add-movie.dto';
-import { SetVisibilityDto } from './dto/set-visibility.dto';
-import { Public } from '../auth/decorators/public.decorator';
+import { UpdatePlaylistDto } from './dto/update-playlist.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { OptionalJwtGuard } from '../auth/guards/optional-jwt.guard';
+import { ApiTags } from '@nestjs/swagger';
 
-@ApiTags('Playlists')
+@ApiTags('playlists')
 @Controller('playlists')
 export class PlaylistsController {
-  constructor(private readonly playlists: PlaylistsService) {}
+  constructor(private readonly playlistsService: PlaylistsService) {}
 
   
-  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
   @Post()
-  create(@Req() req: Request, @Body() dto: CreatePlaylistDto) {
-    const user = (req as any).user as { _id: string };
-    return this.playlists.create(user._id, dto.name, dto.visibility ?? 'private');
+  create(@Req() req: any, @Body() dto: CreatePlaylistDto) {
+    return this.playlistsService.create(req.user._id, dto);
   }
 
   
-  @ApiBearerAuth()
-  @Get('me')
-  findMine(@Req() req: Request) {
-    const user = (req as any).user as { _id: string };
-    return this.playlists.findMine(user._id);
+  @UseGuards(OptionalJwtGuard)
+  @Get()
+  findAll(@Req() req: any) {
+    if (req.user) {
+      return this.playlistsService.findForUser(req.user._id);
+    }
+    return this.playlistsService.findPublic();
   }
 
   
-  @Public()
-  @Get('public')
-  findPublic() {
-    return this.playlists.findPublic();
-  }
-
-  
-  @ApiBearerAuth()
+  @UseGuards(OptionalJwtGuard)
   @Get(':id')
-  findOne(@Req() req: Request, @Param('id') id: string) {
-    const user = (req as any).user as { _id?: string } | undefined;
-    return this.playlists.findOneForViewer(id, user?._id);
-  }
-
- 
-  @ApiBearerAuth()
-  @Put(':id/add')
-  add(@Req() req: Request, @Param('id') id: string, @Body() dto: AddMovieDto) {
-    const user = (req as any).user as { _id: string };
-    return this.playlists.addMovie(id, user._id, dto.movieId);
+  findOne(@Req() req: any, @Param('id') id: string) {
+    const userId: string | null = req.user ? req.user._id : null;
+    return this.playlistsService.findOneFor(userId, id);
   }
 
   
-  @ApiBearerAuth()
-  @Put(':id/remove')
-  removeMovie(@Req() req: Request, @Param('id') id: string, @Body() dto: AddMovieDto) {
-    const user = (req as any).user as { _id: string };
-    return this.playlists.removeMovie(id, user._id, dto.movieId);
+  @UseGuards(AuthGuard('jwt'))
+  @Put(':id')
+  update(@Req() req: any, @Param('id') id: string, @Body() dto: UpdatePlaylistDto) {
+    return this.playlistsService.update(id, dto, req.user._id);
   }
 
   
-  @ApiBearerAuth()
-  @Put(':id/visibility')
-  setVisibility(@Req() req: Request, @Param('id') id: string, @Body() dto: SetVisibilityDto) {
-    const user = (req as any).user as { _id: string };
-    return this.playlists.setVisibility(id, user._id, dto.visibility);
-  }
-
-  
-  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
   @Delete(':id')
-  remove(@Req() req: Request, @Param('id') id: string) {
-    const user = (req as any).user as { _id: string };
-    return this.playlists.remove(id, user._id);
+  remove(@Req() req: any, @Param('id') id: string) {
+    return this.playlistsService.remove(id, req.user._id);
   }
 }

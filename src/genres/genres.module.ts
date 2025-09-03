@@ -8,6 +8,6 @@ import { Genre, GenreSchema } from './schemas/genre.schema';
   imports: [MongooseModule.forFeature([{ name: Genre.name, schema: GenreSchema }])],
   controllers: [GenresController],
   providers: [GenresService],
-  exports: [MongooseModule],
+  exports: [GenresService],
 })
 export class GenresModule {}

@@ -1,6 +1,9 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateGenreDto } from './create-genre.dto';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 
-export class UpdateGenreDto extends PartialType(CreateGenreDto) {
-    name?: string;
+export class UpdateGenreDto {
+  @ApiPropertyOptional({ example: 'Sci-Fi' })
+  @IsOptional()
+  @IsString()
+  name?: string;
 }

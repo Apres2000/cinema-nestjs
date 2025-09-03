@@ -1,73 +1,111 @@
-import { Injectable, ForbiddenException, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Playlist, PlaylistDocument } from './schemas/playlist.schema';
+import { CreatePlaylistDto } from './dto/create-playlist.dto';
+import { UpdatePlaylistDto } from './dto/update-playlist.dto';
 
 @Injectable()
 export class PlaylistsService {
-  constructor(@InjectModel(Playlist.name) private readonly model: Model<PlaylistDocument>) {}
+  constructor(
+    @InjectModel(Playlist.name)
+    private readonly playlistModel: Model<PlaylistDocument>,
+  ) {}
 
-  create(ownerId: string, name: string, visibility: 'private' | 'public' = 'private') {
-    return this.model.create({ owner: new Types.ObjectId(ownerId), name, visibility });
+  
+  private uniqIds(ids: (string | Types.ObjectId)[] = []) {
+    const set = new Set(ids.map((x) => String(x)));
+    return Array.from(set).map((s) => new Types.ObjectId(s));
+  }
+
+  async create(ownerId: string, dto: CreatePlaylistDto) {
+    const doc = await this.playlistModel.create({
+      name: dto.name,
+      owner: new Types.ObjectId(ownerId),
+      isPublic: false, 
+      movies: this.uniqIds(dto.movies),
+    });
+    return doc.toObject();
   }
 
   
-  findMine(ownerId: string) {
-    return this.model.find({ owner: ownerId }).populate('movies').lean();
+  async findPublic() {
+    return this.playlistModel
+      .find({ isPublic: true })
+      .populate('owner', 'email username')
+      .populate('movies', 'title')
+      .lean();
   }
 
   
-  findPublic() {
-    return this.model.find({ visibility: 'public' }).select('-owner').lean();
+  async findForUser(userId: string) {
+    return this.playlistModel
+      .find({
+        $or: [{ isPublic: true }, { owner: new Types.ObjectId(userId) }],
+      })
+      .populate('owner', 'email username')
+      .populate('movies', 'title')
+      .lean();
   }
 
-  async findOneForViewer(id: string, viewerId?: string) {
-    const pl = await this.model.findById(id).populate('movies').lean();
-    if (!pl) throw new NotFoundException('Playlist not found');
-    if (pl.visibility === 'public') return pl;
-    if (viewerId && pl.owner && String(pl.owner) === String(viewerId)) return pl;
-    throw new ForbiddenException('Private playlist');
-  }
+  async findOneFor(userId: string | null, id: string) {
+    if (!Types.ObjectId.isValid(id)) throw new NotFoundException('Playlist not found');
 
-  private async assertOwner(id: string, ownerId: string) {
-    const pl = await this.model.findById(id).lean();
+    const pl = await this.playlistModel
+      .findById(id)
+      .populate('owner', 'email username')
+      .populate('movies', 'title')
+      .lean();
+
     if (!pl) throw new NotFoundException('Playlist not found');
-    if (String(pl.owner) !== String(ownerId)) throw new ForbiddenException('Not your playlist');
+
+    
+    if (!pl.isPublic) {
+      if (!userId || String(pl.owner?._id ?? pl.owner) !== String(userId)) {
+        throw new ForbiddenException('Недостаточно прав');
+      }
+    }
     return pl;
   }
 
-  async addMovie(id: string, ownerId: string, movieId: string) {
-    await this.assertOwner(id, ownerId);
-    const _id = new Types.ObjectId(movieId);
-    const updated = await this.model.findOneAndUpdate(
-      { _id: id, movies: { $ne: _id } },   
-      { $push: { movies: _id } },
-      { new: true }
-    ).populate('movies').lean();
-    if (!updated) throw new ConflictException('Movie already in playlist or playlist not found');
-    return updated;
+  async update(id: string, dto: UpdatePlaylistDto, actingUserId: string) {
+    if (!Types.ObjectId.isValid(id)) throw new NotFoundException('Playlist not found');
+
+    const pl = await this.playlistModel.findById(id);
+    if (!pl) throw new NotFoundException('Playlist not found');
+
+    if (String(pl.owner) !== String(actingUserId)) {
+      throw new ForbiddenException('Редактировать может только владелец');
+    }
+
+    if (dto.name !== undefined) pl.name = dto.name;
+    if (dto.isPublic !== undefined) pl.isPublic = dto.isPublic;
+    if (dto.movies !== undefined) pl.movies = this.uniqIds(dto.movies);
+
+    await pl.save();
+
+    return this.playlistModel
+      .findById(pl._id)
+      .populate('owner', 'email username')
+      .populate('movies', 'title')
+      .lean();
   }
 
-  async removeMovie(id: string, ownerId: string, movieId: string) {
-    await this.assertOwner(id, ownerId);
-    const _id = new Types.ObjectId(movieId);
-    const updated = await this.model.findByIdAndUpdate(
-      id,
-      { $pull: { movies: _id } },
-      { new: true }
-    ).populate('movies').lean();
-    if (!updated) throw new NotFoundException('Playlist not found');
-    return updated;
-  }
+  async remove(id: string, actingUserId: string) {
+    if (!Types.ObjectId.isValid(id)) throw new NotFoundException('Playlist not found');
 
-  async setVisibility(id: string, ownerId: string, visibility: 'private' | 'public') {
-    await this.assertOwner(id, ownerId);
-    return this.model.findByIdAndUpdate(id, { visibility }, { new: true }).lean();
-  }
+    const pl = await this.playlistModel.findById(id);
+    if (!pl) throw new NotFoundException('Playlist not found');
 
-  async remove(id: string, ownerId: string) {
-    await this.assertOwner(id, ownerId);
-    await this.model.findByIdAndDelete(id);
+    if (String(pl.owner) !== String(actingUserId)) {
+      throw new ForbiddenException('Удалять может только владелец');
+    }
+
+    await pl.deleteOne();
     return { ok: true };
   }
 }

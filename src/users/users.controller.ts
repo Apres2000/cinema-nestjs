@@ -1,54 +1,69 @@
-import { Controller, Get, Post, Body, Param, Delete, Put, Req } from '@nestjs/common';
-import { Request } from 'express';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { AuthService } from '../auth/auth.service';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { Public } from '../auth/decorators/public.decorator';
+import { AuthGuard } from '@nestjs/passport';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Public } from '../common/decorators/public.decorator';
+import { ApiTags } from '@nestjs/swagger';
 
-@ApiTags('Users')
+@ApiTags('users')
 @Controller('users')
 export class UsersController {
-  constructor(
-    private readonly usersService: UsersService,
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   
   @Public()
   @Post()
-  async create(@Body() dto: CreateUserDto) {
-    const token = this.authService.generateToken(dto.email);
-    return this.usersService.create(dto, token);
+  create(@Body() dto: CreateUserDto) {
+    return this.usersService.create(dto);
   }
 
   
-  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
   @Get('me')
-  me(@Req() req: Request) {
-    return (req as any).user;
+  me(@Req() req: any) {
+    return this.usersService.findOne(req.user._id);
   }
 
-  @ApiBearerAuth()
+  
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
   @Get()
   findAll() {
     return this.usersService.findAll();
   }
 
-  @ApiBearerAuth()
+  
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
-  @ApiBearerAuth()
+  
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: UpdateUserDto) {
-    return this.usersService.update(id, body);
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.usersService.update(id, dto);
   }
 
-  @ApiBearerAuth()
+  
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);

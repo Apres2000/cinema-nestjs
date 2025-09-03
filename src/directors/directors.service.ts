@@ -1,39 +1,31 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Director, DirectorDocument } from './schemas/director.schema';
 import { CreateDirectorDto } from './dto/create-director.dto';
-import { UpdateDirectorDto } from './dto/update-director.dto';
 
 @Injectable()
 export class DirectorsService {
-  constructor(@InjectModel(Director.name) private readonly model: Model<DirectorDocument>) {}
+  constructor(
+    @InjectModel(Director.name)
+    private readonly directorModel: Model<DirectorDocument>,
+  ) {}
 
-  create(dto: CreateDirectorDto) {
-    return this.model.create({ ...dto, birthDate: new Date(dto.birthDate) });
+  
+  async findAll() {
+    return this.directorModel.find().lean();
   }
 
-  findAll() {
-    return this.model.find().lean();
-  }
-
-  async findOne(id: string) {
-    const doc = await this.model.findById(id).lean();
-    if (!doc) throw new NotFoundException('Director not found');
-    return doc;
-  }
-
-  async update(id: string, dto: UpdateDirectorDto) {
-    const payload: any = { ...dto };
-    if (dto.birthDate) payload.birthDate = new Date(dto.birthDate);
-    const doc = await this.model.findByIdAndUpdate(id, payload, { new: true }).lean();
-    if (!doc) throw new NotFoundException('Director not found');
-    return doc;
-  }
-
-  async remove(id: string) {
-    const doc = await this.model.findByIdAndDelete(id).lean();
-    if (!doc) throw new NotFoundException('Director not found');
-    return { ok: true };
+  
+  async create(dto: CreateDirectorDto) {
+    const exists = await this.directorModel.exists({ name: dto.name });
+    if (exists) {
+      throw new ConflictException('Director with this name already exists');
+    }
+    const doc = await this.directorModel.create({
+      name: dto.name,
+      birthDate: dto.birthDate,
+    });
+    return doc.toObject();
   }
 }

@@ -1,35 +1,32 @@
-import { IsNotEmpty, IsOptional, IsString, IsArray, IsDateString } from 'class-validator';
-import { IsMongoId } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsArray, IsInt, IsMongoId, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateMovieDto {
-  @ApiProperty({ description: 'Название фильма' })
+  @ApiProperty({ example: 'Inception' })
+  @IsString()
   @IsNotEmpty()
-  @IsString()
   title: string;
-  year!: number;
-  duration!: number; 
-  genres?: string[];    
-  directors?: string[];
 
-  @ApiPropertyOptional({ description: 'Описание фильма' })
-  @IsOptional()
-  @IsString()
-  description?: string;
+  @ApiProperty({ example: 2010, minimum: 1888 })
+  @IsInt()
+  @Min(1888)
+  @Max(new Date().getFullYear() + 1)
+  year: number;
 
-  @ApiPropertyOptional({ description: 'ID жанров', type: [String] })
+  @ApiProperty({ example: 148, description: 'Длительность (мин)' })
+  @IsInt()
+  @Min(1)
+  duration: number;
+
+  @ApiPropertyOptional({ example: ['<genreId>'], type: [String] })
   @IsOptional()
   @IsArray()
   @IsMongoId({ each: true })
-  
+  genres?: string[];
 
-  @ApiPropertyOptional({ description: 'ID режиссёра' })
+  @ApiPropertyOptional({ example: ['<directorId>'], type: [String] })
   @IsOptional()
-  @IsMongoId()
-  director?: string;
-
-  @ApiPropertyOptional({ description: 'Дата выхода' })
-  @IsOptional()
-  @IsDateString()
-  releaseDate?: string;
+  @IsArray()
+  @IsMongoId({ each: true })
+  directors?: string[];
 }
